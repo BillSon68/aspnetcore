@@ -2,9 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using System.Net;
 using System.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Server;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Microsoft.AspNetCore.Builder
 {
@@ -19,6 +22,15 @@ namespace Microsoft.AspNetCore.Builder
         /// </summary>
         public static void UseWebAssemblyDebugging(this IApplicationBuilder app)
         {
+            Process debugProxyProcess = null;
+            var lifetime = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
+            lifetime.ApplicationStopping.Register(() => {
+                if (debugProxyProcess != null) {
+                    Console.WriteLine($"Killing process with PID: {debugProxyProcess.Id}");
+                    debugProxyProcess.Kill();
+                }
+            });
+
             app.Map("/_framework/debug", app =>
             {
                 app.Use(async (context, next) =>
@@ -33,7 +45,7 @@ namespace Microsoft.AspNetCore.Builder
                         devToolsHost = $"http://{browserUrl.Host}:{browserUrl.Port}";
                     }
 
-                    var debugProxyBaseUrl = await DebugProxyLauncher.EnsureLaunchedAndGetUrl(context.RequestServices, devToolsHost);
+                    var (debugProxyBaseUrl, debugProxyProcess) = await DebugProxyLauncher.EnsureLaunchedAndGetUrl(context.RequestServices, devToolsHost);
                     var requestPath = context.Request.Path.ToString();
                     if (requestPath == string.Empty)
                     {

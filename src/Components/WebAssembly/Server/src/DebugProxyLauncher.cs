@@ -22,11 +22,11 @@ namespace Microsoft.AspNetCore.Builder
     {
         private static readonly object LaunchLock = new object();
         private static readonly TimeSpan DebugProxyLaunchTimeout = TimeSpan.FromSeconds(10);
-        private static Task<string> LaunchedDebugProxyUrl;
+        private static Task<(string, Process)> LaunchedDebugProxyUrl;
         private static readonly Regex NowListeningRegex = new Regex(@"^\s*Now listening on: (?<url>.*)$", RegexOptions.None, TimeSpan.FromSeconds(10));
         private static readonly Regex ApplicationStartedRegex = new Regex(@"^\s*Application started\. Press Ctrl\+C to shut down\.$", RegexOptions.None, TimeSpan.FromSeconds(10));
 
-        public static Task<string> EnsureLaunchedAndGetUrl(IServiceProvider serviceProvider, string devToolsHost)
+        public static Task<(string, Process)> EnsureLaunchedAndGetUrl(IServiceProvider serviceProvider, string devToolsHost)
         {
             lock (LaunchLock)
             {
@@ -39,9 +39,9 @@ namespace Microsoft.AspNetCore.Builder
             }
         }
 
-        private static async Task<string> LaunchAndGetUrl(IServiceProvider serviceProvider, string devToolsHost)
+        private static async Task<(string, Process)> LaunchAndGetUrl(IServiceProvider serviceProvider, string devToolsHost)
         {
-            var tcs = new TaskCompletionSource<string>();
+            var tcs = new TaskCompletionSource<(string, Process)>();
 
             var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
             var executablePath = LocateDebugProxyExecutable(environment);
@@ -109,7 +109,7 @@ namespace Microsoft.AspNetCore.Builder
             };
         }
 
-        private static void CompleteTaskWhenServerIsReady(Process aspNetProcess, TaskCompletionSource<string> taskCompletionSource)
+        private static void CompleteTaskWhenServerIsReady(Process aspNetProcess, TaskCompletionSource<(string, Process)> taskCompletionSource)
         {
             string capturedUrl = null;
             aspNetProcess.OutputDataReceived += OnOutputDataReceived;
@@ -128,7 +128,7 @@ namespace Microsoft.AspNetCore.Builder
                     aspNetProcess.OutputDataReceived -= OnOutputDataReceived;
                     if (!string.IsNullOrEmpty(capturedUrl))
                     {
-                        taskCompletionSource.TrySetResult(capturedUrl);
+                        taskCompletionSource.TrySetResult((capturedUrl, aspNetProcess));
                     }
                     else
                     {
